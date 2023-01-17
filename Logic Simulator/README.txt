@@ -13,4 +13,5 @@ The netlist can contain the following components-
 * 2x1 Multiplexer
 
 The name of the netlist to be simulated must be changed in the code. No other change is necessary.
-The tool will ask to provide input values and will display output values. Enter 0 or 1 only for accurate results, any other entry will be treated as X.
+The tool will ask to provide input values and will display output values. 
+Enter 0 or 1 only for accurate results, any other entry will be treated as X.
