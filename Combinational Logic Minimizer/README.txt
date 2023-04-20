@@ -1,4 +1,4 @@
-This Python program uses ESPRESSO heuristic to perform 2-level logic minimization a boolean function.
+This Python program uses ESPRESSO heuristic to perform 2-level logic minimization of a boolean function.
 Truth table input specified in csv file is necessary. Future work will include ESPRESSO heuristic minimization from boolean function expression.
 
 The tool asks for user input for desired propagation delay.
