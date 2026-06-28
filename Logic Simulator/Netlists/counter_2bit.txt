@@ -2,6 +2,5 @@ input clk rst
 output q0 q1
 DFF q0_next clk rst q0
 DFF q1_next clk rst q1
-NOT q0 q0_not
-XOR q0 q1 q0_next
-AND q0 q1 q1_next
+NOT q0 q0_next
+XOR q1 q0 q1_next

@@ -1,11 +1,19 @@
+import argparse
+import csv
 import os
+import re
+from pathlib import Path
 
 import circuit_modules
 from matplotlib import pyplot as plt
 
 
+def split_tokens(line):
+    return [token.strip() for token in re.split(r'[\s,]+', line.strip()) if token.strip()]
+
+
 def load_netlist(netlist_path):
-    with open(netlist_path, 'r') as f:
+    with open(netlist_path, 'r', encoding='utf-8') as f:
         lines = [line.strip() for line in f if line.strip()]
 
     if len(lines) < 2:
@@ -15,6 +23,49 @@ def load_netlist(netlist_path):
     output_nodes = lines[1].split()[1:]
     ckt_nodes = [line.split() for line in lines[2:]]
     return input_nodes, output_nodes, ckt_nodes
+
+
+def load_input_vectors(stimulus_path, input_nodes):
+    with open(stimulus_path, 'r', encoding='utf-8') as f:
+        lines = [line.strip() for line in f if line.strip() and not line.lstrip().startswith('#')]
+
+    if not lines:
+        raise ValueError('Stimulus file is empty')
+
+    first_line_tokens = split_tokens(lines[0])
+    header_tokens = first_line_tokens if set(first_line_tokens).issubset(set(input_nodes)) else None
+    data_lines = lines[1:] if header_tokens is not None else lines
+
+    vectors = []
+    for line in data_lines:
+        values = split_tokens(line)
+        if header_tokens is None:
+            if len(values) != len(input_nodes):
+                raise ValueError(f'Expected {len(input_nodes)} values per input vector, got {len(values)}')
+            mapping = {name: val for name, val in zip(input_nodes, values)}
+        else:
+            if len(values) != len(header_tokens):
+                raise ValueError(f'Expected {len(header_tokens)} values per input vector, got {len(values)}')
+            mapping = {name: val for name, val in zip(header_tokens, values)}
+
+        row = []
+        for name in input_nodes:
+            if name not in mapping:
+                raise ValueError(f'Missing input value for {name}')
+            row.append(mapping[name])
+        vectors.append(tuple(row))
+
+    return vectors
+
+
+def write_csv_report(report_path, input_nodes, input_vectors, output_nodes, outputs):
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    with report_path.open('w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        header = ['step'] + list(input_nodes) + list(output_nodes)
+        writer.writerow(header)
+        for step_index, (input_vector, output_vector) in enumerate(zip(input_vectors, outputs)):
+            writer.writerow([step_index] + list(input_vector) + list(output_vector))
 
 
 def seed_flipflop_values(node_vals, ckt_nodes):
@@ -29,31 +80,6 @@ def get_node_value(node_vals, name):
     return node_vals.get(name, 'x')
 
 
-def is_clock_signal(name):
-    return name.lower() in {'clk', 'clock', 'clkin', 'clock_in'}
-
-
-def build_input_vectors(input_nodes, cycles, clock_nodes=None, fixed_values=None):
-    if clock_nodes is None:
-        clock_nodes = []
-    if fixed_values is None:
-        fixed_values = {}
-
-    vectors = []
-    for cycle_index in range(cycles):
-        vector = []
-        for name in input_nodes:
-            if name in clock_nodes or is_clock_signal(name):
-                vector.append('0' if cycle_index % 2 == 0 else '1')
-            elif name in fixed_values:
-                seq = fixed_values[name]
-                vector.append(seq[cycle_index % len(seq)])
-            else:
-                vector.append('0')
-        vectors.append(tuple(vector))
-    return vectors
-
-
 def evaluate_cycle(input_nodes, input_vector, ckt_nodes, output_nodes):
     node_vals = {}
     for name, value in zip(input_nodes, input_vector):
@@ -64,7 +90,6 @@ def evaluate_cycle(input_nodes, input_vector, ckt_nodes, output_nodes):
     for node in ckt_nodes:
         if node[0] == 'DFF':
             continue
-
         if node[0] == 'NOT':
             node_vals[node[2]] = circuit_modules.not_gate(get_node_value(node_vals, node[1]))
         elif node[0] == 'BUFF':
@@ -102,6 +127,23 @@ def simulate_cycles(input_nodes, input_vectors, ckt_nodes, output_nodes):
     return results
 
 
+def build_signal_values(input_nodes, input_vectors, output_nodes, outputs):
+    signal_values = {}
+    for index, name in enumerate(input_nodes):
+        signal_values[name] = [vector[index] for vector in input_vectors]
+    for index, name in enumerate(output_nodes):
+        signal_values[name] = [values[index] for values in outputs]
+    return signal_values
+
+
+def format_cycle_report(step_index, input_nodes, input_vector, output_nodes, output_values):
+    input_parts = [f'{name}={value}' for name, value in zip(input_nodes, input_vector)]
+    output_parts = [f'{name}={value}' for name, value in zip(output_nodes, output_values)]
+    input_text = ' '.join(input_parts)
+    output_text = ' '.join(output_parts)
+    return f'step {step_index}: {input_text} -> {output_text}'
+
+
 def plot_waveforms(signal_values, title='Waveform', output_path=None):
     if output_path is None:
         output_path = os.path.join(os.path.dirname(__file__), 'waveform.png')
@@ -114,7 +156,6 @@ def plot_waveforms(signal_values, title='Waveform', output_path=None):
         axes = [axes]
 
     for ax, name, values in zip(axes, signals, series):
-
         numeric_values = []
         for value in values:
             if value in ['1', 1, True]:
@@ -124,14 +165,11 @@ def plot_waveforms(signal_values, title='Waveform', output_path=None):
             else:
                 numeric_values.append(0.5)
 
-        # Draw each horizontal segment separately
         for i in range(len(values) - 1):
-
             color = 'red' if values[i] not in ['0', 0, False, '1', 1, True] else 'C0'
             linestyle = ':' if color == 'red' else '-'
             linewidth = 2.5 if color == 'red' else 1.8
 
-            # Horizontal segment
             ax.plot(
                 [i, i + 1],
                 [numeric_values[i], numeric_values[i]],
@@ -139,8 +177,6 @@ def plot_waveforms(signal_values, title='Waveform', output_path=None):
                 linestyle=linestyle,
                 linewidth=linewidth
             )
-
-            # Vertical transition
             ax.plot(
                 [i + 1, i + 1],
                 [numeric_values[i], numeric_values[i + 1]],
@@ -148,7 +184,6 @@ def plot_waveforms(signal_values, title='Waveform', output_path=None):
                 linewidth=1.8
             )
 
-        # Draw the final sample
         final_color = 'red' if values[-1] not in ['0', 0, False, '1', 1, True] else 'C0'
         ax.scatter(
             len(values) - 1,
@@ -173,29 +208,65 @@ def plot_waveforms(signal_values, title='Waveform', output_path=None):
     print(f'Waveform saved to {output_path}')
 
 
-def main():
-    base_dir = os.path.dirname(__file__)
-    netlist_path = os.path.join(base_dir, 'dff_only.txt')
-    input_nodes, output_nodes, ckt_nodes = load_netlist(netlist_path)
+def parse_args():
+    parser = argparse.ArgumentParser(description='Simulate a generic digital logic circuit from a netlist and stimulus file.')
+    parser.add_argument('--netlist', required=True, help='Path to the netlist file')
+    parser.add_argument('--stimulus', required=True, help='Path to the stimulus file')
+    parser.add_argument('--output-dir', default=None, help='Directory for generated report and waveform files')
+    parser.add_argument('--report', default=None, help='Path to the output report file')
+    parser.add_argument('--waveform', default=None, help='Path to the waveform image file')
+    parser.add_argument('--title', default=None, help='Title for the waveform plot')
+    return parser.parse_args()
 
-    input_vectors = build_input_vectors(
-        input_nodes,
-        cycles=7,
-        fixed_values={'d': ['1', '1', '0', '0', '1', '1', '1']},
-    )
+
+def resolve_path(path_value, base_dir, default_name=None):
+    path = Path(path_value)
+    if not path.is_absolute():
+        path = base_dir / path
+    path = path.resolve()
+    if default_name is not None and path.suffix == '':
+        path = path.with_suffix(default_name)
+    return path
+
+
+def resolve_output_path(path_value, base_dir, output_dir, default_name):
+    if path_value is None:
+        return (output_dir / default_name).resolve()
+
+    path = Path(path_value)
+    if path.is_absolute():
+        return path.resolve()
+    if path.parent != Path('.'):
+        return (base_dir / path).resolve()
+    return (output_dir / path).resolve()
+
+
+def main():
+    args = parse_args()
+    base_dir = Path(__file__).resolve().parent
+
+    netlist_path = resolve_path(args.netlist, base_dir)
+    stimulus_path = resolve_path(args.stimulus, base_dir)
+    output_dir = resolve_path(args.output_dir or 'Work', base_dir) if args.output_dir else (base_dir / 'Work').resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    report_path = resolve_output_path(args.report, base_dir, output_dir, f'{netlist_path.stem}_outputs.csv')
+    waveform_path = resolve_output_path(args.waveform, base_dir, output_dir, f'{netlist_path.stem}_waveform.png')
+
+    input_nodes, output_nodes, ckt_nodes = load_netlist(netlist_path)
+    input_vectors = load_input_vectors(stimulus_path, input_nodes)
 
     outputs = simulate_cycles(input_nodes, input_vectors, ckt_nodes, output_nodes)
-    print('Cycle-based simulation results:')
-    for i, out in enumerate(outputs):
-        print(f'cycle {i}: d={input_vectors[i][0]} clk={input_vectors[i][1]} rst={input_vectors[i][2]} q={out[0]}')
+    print('Step-based simulation results:')
 
-    signal_values = {
-        'd': [value[0] for value in input_vectors],
-        'clk': [value[1] for value in input_vectors],
-        'rst': [value[2] for value in input_vectors],
-        'q': [value[0] for value in outputs],
-    }
-    plot_waveforms(signal_values, title='D Flip-Flop Waveform')
+    for i, out in enumerate(outputs):
+        print(format_cycle_report(i, input_nodes, input_vectors[i], output_nodes, out))
+
+    write_csv_report(report_path, input_nodes, input_vectors, output_nodes, outputs)
+
+    signal_values = build_signal_values(input_nodes, input_vectors, output_nodes, outputs)
+    plot_waveforms(signal_values, title=args.title or f'{netlist_path.stem} waveform', output_path=waveform_path)
+    print(f'Outputs saved to {report_path}')
 
 
 if __name__ == '__main__':
