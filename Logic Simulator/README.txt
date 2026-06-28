@@ -15,7 +15,7 @@ The netlist can contain the following components-
 
 COMBINATIONAL COMPONENTS:
 Gate format: GATETYPE input1 input2 output
-Example: AND 1 2 5
+Example: AND i1 i2 o1
 
 SEQUENTIAL COMPONENTS:
 D Flip-Flop format: DFF d clk rst q
@@ -30,6 +30,12 @@ For sequential circuits, the simulator maintains flip-flop states across multipl
 Enter 0 or 1 for each cycle. Use multiple cycles to observe state transitions.
 Use internal signal names for both intermediate nodes and flip-flop outputs.
 
-The name of the netlist to be simulated must be changed in the code. No other change is necessary.
-The tool will ask to provide input values and will display output values. 
-Enter 0 or 1 only for accurate results, any other entry will be treated as X.
+INTERACTIVE INTERFACE:
+To run simulations interactively, use the provided TUI script from the Logic Simulator directory:
+  python3 run_sim.py
+
+This interface allows you to:
+- Select between Combinational and Sequential simulators.
+- Choose a netlist from the /Netlists directory.
+- Select a stimulus file from the /Inputs directory.
+- View results in a table and have reports/waveforms saved automatically to the /Outputs directory.
