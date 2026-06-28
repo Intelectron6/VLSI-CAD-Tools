@@ -1,3 +1,61 @@
+# Global state storage for flip-flops to maintain state across simulation cycles
+_flipflop_state = {}
+
+def reset_flipflop_states():
+    """Clear all flip-flop states. Call this when starting a new simulation."""
+    global _flipflop_state
+    _flipflop_state = {}
+
+def d_flipflop(ff_id, d, clk, rst):
+    """
+    D Flip-Flop with asynchronous reset
+    
+    Inputs:
+        ff_id: Unique identifier for this flip-flop instance (used to maintain state)
+        d: Data input
+        clk: Clock signal
+        rst: Asynchronous reset (active high)
+    
+    Output:
+        q: Output (captures d on rising clock edge when rst='0')
+    
+    Behavior:
+        - If rst='1': q='0' (async reset, highest priority)
+        - If rst='0' and clk='1': q=d (capture d value on clock)
+        - If rst='0' and clk='0': q holds previous value
+        - Invalid inputs return 'x'
+    """
+    # Initialize state if flip-flop doesn't exist
+    if ff_id not in _flipflop_state:
+        _flipflop_state[ff_id] = {'q': 'x', 'prev_clk': '0', 'prev_d': '0'}
+
+    state = _flipflop_state[ff_id]
+    
+    # Asynchronous reset (highest priority)
+    if rst == '1':
+        state['q'] = '0'
+        state['prev_clk'] = clk
+        state['prev_d'] = '0'
+        return '0'
+    
+    # Check for invalid inputs
+    if rst not in ['0', '1', 'x'] or clk not in ['0', '1', 'x'] or d not in ['0', '1', 'x']:
+        return 'x'
+
+    # Sample the previous cycle's D input on a rising clock edge
+    prev_clk = state['prev_clk']
+    if prev_clk == '0' and clk == '1' and rst == '0':
+        if state['prev_d'] in ['0', '1']:
+            state['q'] = state['prev_d']
+        else:
+            state['q'] = 'x'
+
+    # Track the last clock and D values for the next cycle
+    state['prev_clk'] = clk
+    state['prev_d'] = d
+
+    return state['q']
+
 def not_gate(a):
     if (a == '0'):
         return '1'
@@ -140,6 +198,14 @@ def ckt (input_nodes, input_vector, ckt_nodes, output_nodes):
 			inp2 = node_vals[i[2]]
 			sel0 = node_vals[i[3]]
 			outp = mux_2x1(inp1, inp2, sel0)
+			node_vals[i[4]] = outp	
+	
+		if i[0] == 'DFF':
+			d_inp = node_vals[i[1]]
+			clk_inp = node_vals[i[2]]
+			rst_inp = node_vals[i[3]]
+			ff_id = i[4]  # Use output node name as unique identifier
+			outp = d_flipflop(ff_id, d_inp, clk_inp, rst_inp)
 			node_vals[i[4]] = outp	
 	
 	outputs = ''

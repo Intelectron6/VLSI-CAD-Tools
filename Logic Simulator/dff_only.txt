@@ -1,0 +1,3 @@
+input d clk rst
+output q
+DFF d clk rst q
