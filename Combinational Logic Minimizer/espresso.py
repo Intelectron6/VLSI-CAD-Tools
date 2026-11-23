@@ -325,9 +325,10 @@ def parse_bool_expression(expr_str):
     """Parse a boolean expression string into a sympy expression.
 
     Accepts forms like:
-        'A & B | ~C'
-        'A AND B OR NOT C'
-        'f = A & B | ~C'
+        'A & B | ~C'          (symbolic operators)
+        'A AND B OR NOT C'    (word operators)
+        'A.B + A.!B'          (EE notation: . = AND, + = OR, ! = NOT)
+        'f = A & B | ~C'      (with optional 'f =' prefix)
 
     Word operators AND/OR/NOT (case-insensitive) are converted to &/|/~.
     """
@@ -336,7 +337,20 @@ def parse_bool_expression(expr_str):
     # Strip optional 'f = ' / 'F = ' prefix (with optional spaces)
     s = re.sub(r'^[fF]\s*=\s*', '', s)
 
-    # Replace word operators with symbolic ones (case-insensitive, whole word)
+    # EE notation: replace '!(' with '~(' (NOT of parenthesized expression)
+    # Must be done BEFORE dot replacement
+    s = s.replace('!(', '~(')
+    # EE notation: replace '!' before a variable with '~' (NOT)
+    s = re.sub(r'!(\w)', r'~\1', s)
+
+    # EE notation: replace '.' between word characters with '&' (AND)
+    # Handles both 'A.B' -> 'A&B' and 'A.~B' -> 'A&~B'
+    s = re.sub(r'(\w)\.(~?\w)', r'\1&\2', s)
+
+    # EE notation: replace '+' with '|' (OR)
+    s = s.replace('+', '|')
+
+    # Word operators (case-insensitive, whole word)
     s = re.sub(r'\bAND\b', '&', s, flags=re.IGNORECASE)
     s = re.sub(r'\bOR\b', '|', s, flags=re.IGNORECASE)
     s = re.sub(r'\bNOT\b', '~', s, flags=re.IGNORECASE)
@@ -352,6 +366,8 @@ def _dnf_to_cubes(dnf, var_index):
         (0, 1) = positive literal  (x)
         (1, 0) = negative literal  (NOT x)
         (1, 1) = don't-care        (variable absent from term)
+
+    Contradictory terms (e.g. B & ~B) are skipped since they are always false.
     """
     width = len(var_index)
     if isinstance(dnf, Or):
@@ -367,6 +383,7 @@ def _dnf_to_cubes(dnf, var_index):
             literals = [term]
 
         cube = [(1, 1)] * width
+        contradictory = False
         for lit in literals:
             if isinstance(lit, Not):
                 var = str(lit.args[0])
@@ -377,7 +394,15 @@ def _dnf_to_cubes(dnf, var_index):
 
             if var in var_index:
                 idx = var_index[var]
-                cube[idx] = (0, 1) if polarity == 'pos' else (1, 0)
+                desired = (0, 1) if polarity == 'pos' else (1, 0)
+                # Detect contradiction: variable already assigned opposite polarity
+                if cube[idx] != (1, 1) and cube[idx] != desired:
+                    contradictory = True
+                    break
+                cube[idx] = desired
+
+        if contradictory:
+            continue  # Skip always-false terms like B & ~B
 
         cubes.append(cube)
 
