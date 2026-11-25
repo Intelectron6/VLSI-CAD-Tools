@@ -18,7 +18,7 @@ import tempfile
 
 PYTHON = "F:\\Anaconda_Python\\python.exe"
 ESPRESSO = "espresso.py"
-WORKDIR = os.path.dirname(os.path.abspath(__file__))
+WORKDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 LOGIC_SIM_DIR = os.path.join(WORKDIR, "..", "Logic Simulator")
 RUN_SIM = os.path.join(LOGIC_SIM_DIR, "run_sim.py")
@@ -113,7 +113,7 @@ def main():
         print("=" * 60)
         print("STEP 1: Generate netlist from espresso.py")
         print("=" * 60)
-        expr, cost = run_espresso('logic.csv', 5, netlist_path)
+        expr, cost = run_espresso('examples/logic.csv', 5, netlist_path)
         if expr is None:
             print("  FAILED: espresso.py did not produce output")
             return 1

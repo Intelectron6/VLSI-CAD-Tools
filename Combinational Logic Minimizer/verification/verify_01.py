@@ -19,7 +19,7 @@ import tempfile
 
 PYTHON = "F:\\Anaconda_Python\\python.exe"
 ESPRESSO = "espresso.py"
-WORKDIR = os.path.dirname(os.path.abspath(__file__))
+WORKDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def bool_expr_vars(expr_str):
@@ -171,9 +171,9 @@ def main():
     print("=" * 60)
 
     baselines = [
-        ('logic.csv', 5, '(x[1]) OR (x[0] AND x[2])', 4),
-        ('logic.csv', 6, '((NOT x[0]) AND x[1] AND x[2]) OR (x[0] AND x[2]) OR (x[0] AND x[1] AND (NOT x[2]))', 6),
-        ('logic.csv', 8, '((NOT x[0]) AND x[1] AND x[2]) OR (x[0] AND x[2]) OR (x[0] AND x[1] AND (NOT x[2]))', 6),
+        ('examples/logic.csv', 5, '(x[1]) OR (x[0] AND x[2])', 4),
+        ('examples/logic.csv', 6, '((NOT x[0]) AND x[1] AND x[2]) OR (x[0] AND x[2]) OR (x[0] AND x[1] AND (NOT x[2]))', 6),
+        ('examples/logic.csv', 8, '((NOT x[0]) AND x[1] AND x[2]) OR (x[0] AND x[2]) OR (x[0] AND x[1] AND (NOT x[2]))', 6),
     ]
 
     for fname, tau, exp_expr, exp_cost in baselines:

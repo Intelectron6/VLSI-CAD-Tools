@@ -16,7 +16,7 @@ import tempfile
 
 PYTHON = "F:\\Anaconda_Python\\python.exe"
 ESPRESSO = "espresso.py"
-WORKDIR = os.path.dirname(os.path.abspath(__file__))
+WORKDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOGIC_SIM_DIR = os.path.join(WORKDIR, "..", "Logic Simulator")
 
 
@@ -201,15 +201,15 @@ def main():
     all_pass = True
 
     # Test 1: logic.csv (3 variables)
-    r1 = test_case('logic.csv', 5, 'logic.csv', 3, 'logic.csv tau=5')
+    r1 = test_case('examples/logic.csv', 5, 'examples/logic.csv', 3, 'logic.csv tau=5')
     all_pass = all_pass and r1
 
     # Test 2: logic2.csv (4 variables, majority-like function)
-    r2 = test_case('logic2.csv', 6, 'logic2.csv', 4, 'logic2.csv tau=6')
+    r2 = test_case('examples/logic2.csv', 6, 'examples/logic2.csv', 4, 'logic2.csv tau=6')
     all_pass = all_pass and r2
 
     # Test 3: logic3.csv (5 variables, complex function with don't-cares)
-    r3 = test_case('logic3.csv', 8, 'logic3.csv', 5, 'logic3.csv tau=8')
+    r3 = test_case('examples/logic3.csv', 8, 'examples/logic3.csv', 5, 'logic3.csv tau=8')
     all_pass = all_pass and r3
 
     print(f"\n{'='*60}")

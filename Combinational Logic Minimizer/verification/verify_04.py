@@ -19,7 +19,7 @@ import tempfile
 
 PYTHON = "F:\\Anaconda_Python\\python.exe"
 ESPRESSO = "espresso.py"
-WORKDIR = os.path.dirname(os.path.abspath(__file__))
+WORKDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOGIC_SIM_DIR = os.path.join(WORKDIR, "..", "Logic Simulator")
 
 

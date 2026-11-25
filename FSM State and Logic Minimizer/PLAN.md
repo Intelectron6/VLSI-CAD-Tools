@@ -7,6 +7,8 @@ The current `FSM State and Logic Minimizer` is monolithic—it combines state mi
 1. **Symbolic Input:** Adopt a JSON-based FSM representation to replace the CSV transition table.
 2. **Decoupled Flow:** Separate the state minimization and logic minimization phases into distinct, chainable steps.
 3. **Netlist Generator:** Generate SPICE-style netlists for the minimized logic using the standard building blocks: NOT, BUFF, AND, OR, NAND, NOR, XOR, XNOR, MUX2x1, DFF.
+4. **State Transition Diagram Generation:** Generate visual state transition diagrams (state graphs) for both the initial and post-state-minimization tables using a graph library (e.g., `graphviz` or `networkx` with `matplotlib`), enabling visual verification of state equivalence and minimization results.
+5. **User-Friendly Interface (TUI):** Add an interactive prompt_toolkit/rich-based TUI (similar to `run_minimizer.py` in the Combinational Logic Minimizer) for selecting input files, setting target cost, viewing results, generating netlists, and viewing state transition diagrams interactively.
 
 ## Implementation Steps
 1. **JSON Schema Definition:** Define a clear JSON structure representing the FSM:
@@ -19,9 +21,11 @@ The current `FSM State and Logic Minimizer` is monolithic—it combines state mi
    - **Phase 2: Logic Minimization:** Extract the logic synthesis part into a separate function/module that takes the optimized FSM and applies the ESPRESSO heuristic (using the logic developed for the Combinational Minimizer).
    - **Phase 3: Netlist Generation:** Convert the final minimized next-state and output logic into a netlist using the 10 building blocks.
 4. **Integration:** Create a main pipeline function that optionally allows running the full flow or individual phases.
+5. **User-Friendly Interface (TUI):** Add an interactive prompt_toolkit/rich-based TUI (similar to `run_minimizer.py` in the Combinational Logic Minimizer) for selecting input files, setting target cost, viewing results, generating netlists, and viewing state transition diagrams interactively.
 
 ## Benefits
 - **Modularity:** Students can analyze the effect of state minimization independently of logic synthesis.
 - **Usability:** Symbolic JSON input is easier to write, read, and validate than large CSV tables.
 - **Extensibility:** Easier to integrate into larger tool-chains (e.g., feeding an optimized state machine into a different synthesis tool).
 - **Compatibility:** Output netlists can be directly simulated in the `Logic Simulator`.
+- **Pedagogy:** State transition diagrams provide visual confirmation of state equivalence and minimization results, making the tool more useful for teaching and debugging.

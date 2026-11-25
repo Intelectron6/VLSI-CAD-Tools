@@ -1,8 +1,0 @@
-input x[0] x[1] x[2]
-output f
-AND x[0] x[1] n1
-AND n1 x[2] n2
-NOT x[2] n3
-AND x[0] x[1] n4
-AND n4 n3 n5
-OR n2 n5 f
