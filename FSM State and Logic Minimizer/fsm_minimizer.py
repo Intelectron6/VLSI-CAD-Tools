@@ -223,15 +223,15 @@ def calc_cost(onset):
             maxval = sumval      
     return cost + maxval
 
-def fsm_minimizer(class_eq_st, length, factor):
+def fsm_minimizer(class_eq_st, length, factor, stt_df):
     record = dict()
     for i,a in enumerate(class_eq_st):
             record[a] = []
 
     #Step 1
     for i in range(length):
-        prst = stt['PS'][i] 
-        outp = stt['z'][i]
+        prst = stt_df['PS'][i] 
+        outp = stt_df['z'][i]
         for j in class_eq_st:
             if (j == prst):
                 record[prst].append(outp)
@@ -268,9 +268,9 @@ def fsm_minimizer(class_eq_st, length, factor):
         for i in class_eq_st2:
             for j in range(len(i)):
                 for k in range(length):
-                    if (i[j] == stt['PS'][k]):
+                    if (i[j] == stt_df['PS'][k]):
                         for l,b in enumerate(class_eq_st2):  
-                            if (stt['NS'][k] in b):
+                            if (stt_df['NS'][k] in b):
                                 behav[i[j]].append(l)
         new_class = []
 
@@ -293,11 +293,17 @@ def fsm_minimizer(class_eq_st, length, factor):
 
     print("Final states:", final_states)
 
+    # Build state mapping from old states to new state names
+    state_mapping = {}
+    for new_idx, old_states in enumerate(class_eq_st2):
+        for old_state in old_states:
+            state_mapping[old_state] = f"S{new_idx}"
+
     #Updating the state transition table    	 
-    old_x = stt['x']
-    old_PS = stt['PS']
-    old_NS = stt['NS']
-    old_z = stt['z']
+    old_x = stt_df['x']
+    old_PS = stt_df['PS']
+    old_NS = stt_df['NS']
+    old_z = stt_df['z']
 
     whatever_x = list(old_x)
     stuff_x = len(str(max(whatever_x)))
@@ -393,157 +399,180 @@ def fsm_minimizer(class_eq_st, length, factor):
         truth_tables.append(new_list)
 
     tt = pd.DataFrame(truth_tables)
-    return final_states, tt
+    return final_states, tt, class_eq_st2, state_mapping
 
-stt = pd.read_csv("fsm.csv")
-target = int(input("Enter target cost:"))
 
-print("State Minimization")
-class_eq_st = list(stt['PS'])
-length = len(class_eq_st)
-inp_len = len(str(max(list(stt['x']))))
-factor = 2*inp_len
-class_eq_st = class_eq_st[0:length//factor]
-print("Orginal states:", class_eq_st)
+# Module-level state (read by expand())
+offset = None
 
-final_states, tt = fsm_minimizer(class_eq_st, length, factor)
 
-print("")
-cost_list = []
-st_len = math.ceil(np.log2(len(final_states)))
-outp_len = len(str(max(list(stt['z']))))
-for k in range(st_len + outp_len):
-    if (k < st_len):
-        print("Solutions to Next State Logic: NS(" + str(st_len - k - 1) + ")")
-    else:
-        print("Solutions to Output Logic Z(" + str(st_len + outp_len - k - 1) + ")")
+def run_minimization(stt_df, target_cost):
+    """Run FSM state minimization and logic synthesis from a transition table DataFrame.
 
-    length = len(tt[st_len + outp_len + k])
-    width = int(math.ceil(np.log2(length)))
-    max_count = int(width * 50)
+    Parameters
+    ----------
+    stt_df : pandas.DataFrame
+        DataFrame with columns 'x', 'PS', 'NS', 'z' (same format as the CSV input).
+    target_cost : int
+        Target cost for ESPRESSO minimization.
 
-    mat = []
-    for i in range(length):
-        mat.append([])
-        for j in range(width + 1):
-            mat[i].append('00')
+    Returns
+    -------
+    dict
+        Dictionary with keys:
+        - 'final_states': list of minimized state names
+        - 'expressions': list of minimized SOP expression strings (one per output bit)
+        - 'costs': list of final costs (one per output bit)
+        - 'max_cost': maximum cost across all outputs (critical path delay)
+        - 'transition_table': the minimized transition table DataFrame
+        - 'inp_len': number of input bits
+        - 'state_mapping': dict mapping old state names to new state names (e.g. {'A': 'S0', 'B': 'S1'})
+    """
+    stt = stt_df
 
-    for i in range(length):
-        for j in range(width):
-            mat[i][j] = encoding(tt[width-j-1][i])
-        mat[i][width] = tt[st_len + outp_len + k][i]
+    print("State Minimization")
+    class_eq_st = list(stt['PS'])
+    length = len(class_eq_st)
+    inp_len = len(str(max(list(stt['x']))))
+    factor = 2 * inp_len
+    class_eq_st = class_eq_st[0:length // factor]
+    print("Original states:", class_eq_st)
 
-    onset, offset, dcset = [], [], []
-    for i in range(length):
-        if mat[i][-1] == '0':
-            offset.append(mat[i][0:-1])
-        elif mat[i][-1] == '1':
-            onset.append(mat[i][0:-1])
-        else:
-            dcset.append(mat[i][0:-1])        
+    final_states, tt, class_eq_st2, state_mapping = fsm_minimizer(class_eq_st, length, factor, stt)
 
-    #Expansion process
-    #print("Round 0")
-    weights = calc_weights(onset)
-    choice_exp = weights.index(min(weights))
-    #print("Expand the minterm of index", choice_exp , "in the on-set")
-    #print("onset before expansion",onset)
-    onset = expand(onset, choice_exp)
-    #print("Final onset after expansion-", onset)
-
-    #Irredundancy process
-    onset = irredundant(onset, choice_exp)
-    #print("Final onset after irredundacny-", onset)
-
-    #Cost calculation
-    cost = calc_cost(onset)
-    #print("Cost = ", cost)
-
-    count = 0
-    prev_cost = cost
-    sol_set = onset
-    prev_weights = weights
-    tau = target
-
-    while (cost > tau and count < max_count):
-        #print()
-        #print("Round",(count+1))
-
-        #Reduction process
-        red_weights = calc_weights(onset)
-        choice_red = red_weights.index(max(red_weights))
-        #print("Reduce the minterm of index", choice_red , "in the on-set")
-        onset = reduce(onset, choice_red, count)
-        #print("Final onset after reduction-", onset)
-
-        exp_weights = calc_weights(onset)
-        #print("Current weights", exp_weights)
-        #print("Previous weights", prev_weights)
-        if (exp_weights == prev_weights):   
-            choice_exp = random.choice([k for k in range(len(onset))])
-        else:
-            choice_exp = exp_weights.index(min(exp_weights))
-
-        prev_weights = exp_weights
-        
-        #print("Expand the minterm of index", choice_exp , "in the on-set")
-        #print("onset before expansion",onset)
-        onset = expand(onset, choice_exp)
-        #print("Final onset after expansion-", onset)
-
-        #Irredundancy process
-        onset = irredundant(onset, choice_exp)
-        #print("Final onset after irredundacny-", onset)
-
-        #Cost calculation
-        cost = calc_cost(onset)
-        #print("Cost = ", cost)
-
-        if (cost < prev_cost):
-            prev_cost = cost
-            #print("Better solution found!")
-            sol_set = onset
-
-        count = count + 1
-
-    sol_str = ''
-    var = ''
-    for i in sol_set:
-        count = 0
-        count1 = 0
-        sol_str = sol_str + '('
-        another_count = 0
-        for j in i:
-            if (j == (0, 1)):
-                another_count = another_count + 1
-                if (another_count > 1):
-                    sol_str = sol_str + ' AND '
-                if (count < inp_len):
-                    var = 'x'
-                    count1 = count
-                else:
-                    var = 'PS'
-                    count1 = count - inp_len
-                sol_str = sol_str + var + "["+str(count1)+"]"
-            elif (j == (1, 0)):
-                another_count = another_count + 1
-                if (another_count > 1):
-                    sol_str = sol_str + ' AND '
-                if (count < inp_len):
-                    var = 'x'
-                    count1 = count
-                else:
-                    var = 'PS'
-                    count1 = count - inp_len
-                sol_str = sol_str + "(NOT " + var + "["+str(count1)+"])"
-            count = count + 1    
-        sol_str = sol_str + ') OR '
-    sol_str = sol_str[:-3]
-    
-    cost_list.append(prev_cost)
-    print(sol_str)
-    print("Cost:", prev_cost)
     print("")
-   
+    cost_list = []
+    expressions = []
+    global offset  # module-level, read by expand()
+    st_len = math.ceil(np.log2(len(final_states)))
+    outp_len = len(str(max(list(stt['z']))))
+    for k in range(st_len + outp_len):
+        if k < st_len:
+            print("Solutions to Next State Logic: NS(" + str(st_len - k - 1) + ")")
+        else:
+            print("Solutions to Output Logic Z(" + str(st_len + outp_len - k - 1) + ")")
 
-print("Maximum delay (critical path) =", max(cost_list))
+        length = len(tt[st_len + outp_len + k])
+        width = int(math.ceil(np.log2(length)))
+        max_count = int(width * 50)
+
+        mat = []
+        for i in range(length):
+            mat.append([])
+            for j in range(width + 1):
+                mat[i].append('00')
+
+        for i in range(length):
+            for j in range(width):
+                mat[i][j] = encoding(tt[width - j - 1][i])
+            mat[i][width] = tt[st_len + outp_len + k][i]
+
+        onset, offset, dcset = [], [], []
+        for i in range(length):
+            if mat[i][-1] == '0':
+                offset.append(mat[i][0:-1])
+            elif mat[i][-1] == '1':
+                onset.append(mat[i][0:-1])
+            else:
+                dcset.append(mat[i][0:-1])
+
+        # Expansion process
+        weights = calc_weights(onset)
+        choice_exp = weights.index(min(weights))
+        onset = expand(onset, choice_exp)
+
+        # Irredundancy process
+        onset = irredundant(onset, choice_exp)
+
+        # Cost calculation
+        cost = calc_cost(onset)
+
+        count = 0
+        prev_cost = cost
+        sol_set = onset
+        prev_weights = weights
+        tau = target_cost
+
+        while (cost > tau and count < max_count):
+            # Reduction process
+            red_weights = calc_weights(onset)
+            choice_red = red_weights.index(max(red_weights))
+            onset = reduce(onset, choice_red, count)
+
+            exp_weights = calc_weights(onset)
+            if exp_weights == prev_weights:
+                choice_exp = random.choice([k for k in range(len(onset))])
+            else:
+                choice_exp = exp_weights.index(min(exp_weights))
+
+            prev_weights = exp_weights
+
+            onset = expand(onset, choice_exp)
+
+            # Irredundancy process
+            onset = irredundant(onset, choice_exp)
+
+            # Cost calculation
+            cost = calc_cost(onset)
+
+            if cost < prev_cost:
+                prev_cost = cost
+                sol_set = onset
+
+            count = count + 1
+
+        sol_str = ''
+        for i in sol_set:
+            count = 0
+            count1 = 0
+            sol_str = sol_str + '('
+            another_count = 0
+            for j in i:
+                if j == (0, 1):
+                    another_count = another_count + 1
+                    if another_count > 1:
+                        sol_str = sol_str + ' AND '
+                    if count < inp_len:
+                        var = 'x'
+                        count1 = count
+                    else:
+                        var = 'PS'
+                        count1 = count - inp_len
+                    sol_str = sol_str + var + "[" + str(count1) + "]"
+                elif j == (1, 0):
+                    another_count = another_count + 1
+                    if another_count > 1:
+                        sol_str = sol_str + ' AND '
+                    if count < inp_len:
+                        var = 'x'
+                        count1 = count
+                    else:
+                        var = 'PS'
+                        count1 = count - inp_len
+                    sol_str = sol_str + "(NOT " + var + "[" + str(count1) + "])"
+                count = count + 1
+            sol_str = sol_str + ') OR '
+        sol_str = sol_str[:-3]
+
+        cost_list.append(prev_cost)
+        expressions.append(sol_str)
+        print(sol_str)
+        print("Cost:", prev_cost)
+        print("")
+
+    return {
+        'final_states': final_states,
+        'expressions': expressions,
+        'costs': cost_list,
+        'max_cost': max(cost_list),
+        'transition_table': tt,
+        'inp_len': inp_len,
+        'state_mapping': state_mapping,
+    }
+
+
+if __name__ == '__main__':
+    stt = pd.read_csv("examples/fsm.csv")
+    target = int(input("Enter target cost:"))
+    result = run_minimization(stt, target)
+    print("Maximum delay (critical path) =", result['max_cost'])
